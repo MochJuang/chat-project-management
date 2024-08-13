@@ -1,0 +1,102 @@
+
+services:
+  nginx:
+    container_name: chat-nginx
+    image: nginx:latest
+    ports:
+      - "8080:80"
+    volumes:
+      - ./data/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - websocket_service
+      - notification_service
+      - chat_service
+    networks:
+      - internal
+
+  websocket_service:
+    container_name: chat-websocket-server
+    build:
+      context: ./../websocket-service
+      dockerfile: websocket_service.dockerfile
+    # volumes:
+    #   - ./data/websocket_service:/usr/src/app/data
+    environment:
+      - RABBITMQ_ADDRESS=amqp://guest:guest@rabbitmq:5672
+      - SERVER_ADDRESS=websocket_service:8082
+      - GRPC_SERVER=chat_service:8084
+    networks:
+      - internal
+
+  notification_service:
+    container_name: chat-notification-server
+    build:
+      context: ./../notification-service
+      dockerfile: notification_service.dockerfile
+    # volumes:
+    #   - ./data/auth-server:/usr/src/app/data
+    environment:
+      - SERVER_ADDRESS=notification_service:8085
+      - DB_SOURCE=host=172.17.0.1 user=user password=92jf923_93jf dbname=chat_app port=5432 sslmode=disable TimeZone=Asia/Jakarta
+      - RABBITMQ_ADDRESS=amqp://guest:guest@rabbitmq:5672
+    networks:
+      - internal
+    depends_on:
+      - db
+
+  authentication_service:
+    container_name: chat-authentication-server
+    build:
+      context: ./../authentication-service
+      dockerfile: authentication_service.dockerfile
+    # volumes:
+    #   - ./data/auth-server:/usr/src/app/data
+    environment:
+      - SERVER_ADDRESS=authentication_service:8081
+      - DB_SOURCE=host=172.17.0.1 user=user password=92jf923_93jf dbname=chat_app port=5432 sslmode=disable TimeZone=Asia/Jakarta
+    networks:
+      - internal
+    depends_on:
+      - db
+
+  chat_service:
+     container_name: chat-chat-server
+     build:
+       context: ./../chat-service
+       dockerfile: chat_service.dockerfile
+     environment:
+       - SERVER_ADDRESS=chat_service:8083
+       - GRPC_SERVER=chat_service:8084
+       - DB_SOURCE=host=172.17.0.1 user=user password=92jf923_93jf dbname=chat_app port=5432 sslmode=disable TimeZone=Asia/Jakarta
+     networks:
+       - internal
+     depends_on:
+       - db
+
+  rabbitmq:
+     image: rabbitmq:management
+     ports:
+       - "15672:15672"
+       - "5672:5672"
+     volumes:
+       - ./data/rabbitmq:/var/lib/rabbitmq
+     networks:
+       - internal
+
+  db:
+    container_name: chat-db
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: 92jf923_93jf
+      POSTGRES_DB: chat_app
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/db:/var/lib/postgresql/data
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
